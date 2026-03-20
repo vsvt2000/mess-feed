@@ -20,10 +20,13 @@ export default function FlavorLab() {
   const [submitMsg, setSubmitMsg] = useState('')
 
    function getWeekStart() {
-    const d = new Date()
-    const day = d.getDay()
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-    return new Date(d.setDate(diff)).toISOString().split('T')[0]
+    const now = new Date()
+  const day = now.getDay() // 0 = Sunday, 1 = Monday...
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diffToMonday)
+  monday.setHours(0, 0, 0, 0)
+  return monday.toISOString().split('T')[0]
   }
 
   useEffect(() => {
@@ -33,10 +36,9 @@ export default function FlavorLab() {
       const weekStart = getWeekStart()
 
       const { data: pitchData } = await supabase
-        .from('dish_pitches')
-        .select('*, profiles(name)')
-        .eq('week_start', weekStart)
-        .order('upvote_count', { ascending: false })
+      .from('dish_pitches')
+      .select('*, profiles(name)')
+      .order('upvote_count', { ascending: false })
 
       const { data: pollData } = await supabase
         .from('weekly_polls')

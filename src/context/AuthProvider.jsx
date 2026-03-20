@@ -15,6 +15,7 @@ export default function AuthProvider({ children }) {
       .single()
     setProfile(data)
     setLoading(false)
+    return data
   }
 
   useEffect(() => {
@@ -33,6 +34,14 @@ export default function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  
+
+  // Poll for verification status every 10s if not yet verified
+  useEffect(() => {
+    if (!user || profile?.is_verified_eater) return
+    const interval = setInterval(() => fetchProfile(user.id), 10000)
+    return () => clearInterval(interval)
+  }, [user, profile?.is_verified_eater])
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, fetchProfile }}>

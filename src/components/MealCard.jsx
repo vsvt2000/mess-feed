@@ -1,16 +1,19 @@
+/* eslint-disable no-unused-vars */
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import CommentSection from './CommentSection'
-import { MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MessageCircle, ChevronLeft, ChevronRight, ThumbsUp, ThumbsDown, Flame, Snowflake, Frown, ChefHat } from 'lucide-react'
 
 const REACTIONS = [
-  { type: 'fire', emoji: '🔥', label: 'Delicious' },
-  { type: 'ice', emoji: '🧊', label: 'Bland' },
-  { type: 'nausea', emoji: '🤢', label: 'Bad' },
+  { type: 'fire', icon: Flame, label: 'Delicious', activeClass: 'bg-orange-50 border-orange-300 text-orange-600' },
+  { type: 'ice', icon: Snowflake, label: 'Bland', activeClass: 'bg-blue-50 border-blue-300 text-blue-600' },
+  { type: 'nausea', icon: Frown, label: 'Bad', activeClass: 'bg-red-50 border-red-300 text-red-600' },
 ]
 
-const MEAL_LABELS = { breakfast: '🌅 Breakfast', lunch: '☀️ Lunch', dinner: '🌙 Dinner' }
+const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
+const MEAL_COLORS = { breakfast: 'bg-amber-50 text-amber-700', lunch: 'bg-blue-50 text-blue-700', dinner: 'bg-indigo-50 text-indigo-700' }
+
 
 export default function MealCard({ meal }) {
   const { profile } = useAuth()
@@ -114,27 +117,52 @@ useEffect(() => {
 
 
   async function handleReaction(dishId, type) {
-    if (!profile?.is_verified_eater) return alert('You need to be a Verified Eater to react.')
-    const existing = myReactions[dishId]
-    if (existing === type) {
-      await supabase.from('reactions').delete().eq('dish_id', dishId).eq('user_id', profile.id)
-    } else {
-      await supabase.from('reactions').upsert({ dish_id: dishId, user_id: profile.id, type })
-    }
-    fetchReactions()
+  const { data: fresh } = await supabase
+    .from('profiles')
+    .select('is_verified_eater')
+    .eq('id', profile?.id)
+    .single()
+
+  if (!fresh?.is_verified_eater) {
+    alert('You need to be a Verified Eater to react. Ask the mess staff to verify you at the entry.')
+    return
   }
 
-  async function handleVote(dishId, value) {
-    if (!profile?.is_verified_eater) return alert('You need to be a Verified Eater to vote.')
-    const existing = myVotes[dishId]
-    if (existing === value) {
-      await supabase.from('votes').delete().eq('dish_id', dishId).eq('user_id', profile.id)
-    } else {
-      await supabase.from('votes').upsert({ dish_id: dishId, user_id: profile.id, value })
-    }
-    fetchVotes()
+  const existing = myReactions[dishId]
+  if (existing === type) {
+    await supabase.from('reactions').delete()
+      .eq('dish_id', dishId).eq('user_id', profile.id)
+  } else {
+    await supabase.from('reactions').upsert({
+      dish_id: dishId, user_id: profile.id, type
+    })
+  }
+  fetchReactions()
+}
+
+async function handleVote(dishId, value) {
+  const { data: fresh } = await supabase
+    .from('profiles')
+    .select('is_verified_eater')
+    .eq('id', profile?.id)
+    .single()
+
+  if (!fresh?.is_verified_eater) {
+    alert('You need to be a Verified Eater to vote. Ask the mess staff to verify you at the entry.')
+    return
   }
 
+  const existing = myVotes[dishId]
+  if (existing === value) {
+    await supabase.from('votes').delete()
+      .eq('dish_id', dishId).eq('user_id', profile.id)
+  } else {
+    await supabase.from('votes').upsert({
+      dish_id: dishId, user_id: profile.id, value
+    })
+  }
+  fetchVotes()
+}
   function scrollTo(idx) {
     setActiveIdx(idx)
     scrollRef.current?.children[idx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
@@ -143,122 +171,126 @@ useEffect(() => {
   const activeDish = dishes[activeIdx]
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Meal header */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <span className="font-semibold text-gray-900">{MEAL_LABELS[meal.type] || meal.type}</span>
-        <span className="text-xs text-gray-400">{meal.hostel_block}</span>
+    <div className="card overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-gray-50">
+        <div className="flex items-center gap-2">
+          <span className={`badge ${MEAL_COLORS[meal.type]}`}>
+            {MEAL_LABELS[meal.type] || meal.type}
+          </span>
+          <span className="text-xs text-gray-400">{meal.hostel_block}</span>
+        </div>
+        <span className="text-xs text-gray-300">
+          {new Date(meal.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
 
-      {/* Dish carousel */}
+      {/* Carousel */}
       {dishes.length > 0 ? (
         <>
-          <div className="relative">
+          <div className="relative bg-gray-100">
             <div
               ref={scrollRef}
-              className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+              className="flex overflow-x-auto snap-x snap-mandatory"
               style={{ scrollbarWidth: 'none' }}
-              onScroll={e => {
-                const idx = Math.round(e.target.scrollLeft / e.target.offsetWidth)
-                setActiveIdx(idx)
-              }}
+              onScroll={e => setActiveIdx(Math.round(e.target.scrollLeft / e.target.offsetWidth))}
             >
               {dishes.map(dish => (
                 <div key={dish.id} className="min-w-full snap-center">
-                  {dish.photo_url ? (
-                    <img src={dish.photo_url} alt={dish.name} className="w-full h-56 object-cover" />
-                  ) : (
-                    <div className="w-full h-56 bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center">
-                      <span className="text-6xl">🍛</span>
-                    </div>
-                  )}
+                  {dish.photo_url
+                    ? <img src={dish.photo_url} alt={dish.name} className="w-full h-56 object-cover" />
+                    : (
+                      <div className="w-full h-56 bg-gradient-to-br from-gray-100 to-gray-200 flex flex-col items-center justify-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+                          <ChefHat size={20} className="text-gray-500" />
+                        </div>
+                        <p className="text-sm text-gray-400">No photo yet</p>
+                      </div>
+                    )
+                  }
                 </div>
               ))}
             </div>
 
-            {/* Prev/Next */}
             {dishes.length > 1 && (
               <>
                 {activeIdx > 0 && (
                   <button onClick={() => scrollTo(activeIdx - 1)}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur rounded-full p-1 shadow">
-                    <ChevronLeft size={16} />
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-sm border border-gray-100">
+                    <ChevronLeft size={14} className="text-gray-700" />
                   </button>
                 )}
                 {activeIdx < dishes.length - 1 && (
                   <button onClick={() => scrollTo(activeIdx + 1)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur rounded-full p-1 shadow">
-                    <ChevronRight size={16} />
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-sm border border-gray-100">
+                    <ChevronRight size={14} className="text-gray-700" />
                   </button>
                 )}
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+                  {dishes.map((_, i) => (
+                    <button key={i} onClick={() => scrollTo(i)}
+                      className={`rounded-full transition-all ${i === activeIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/60'}`}
+                    />
+                  ))}
+                </div>
               </>
-            )}
-
-            {/* Dots */}
-            {dishes.length > 1 && (
-              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
-                {dishes.map((_, i) => (
-                  <button key={i} onClick={() => scrollTo(i)}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === activeIdx ? 'bg-white' : 'bg-white/50'}`}
-                  />
-                ))}
-              </div>
             )}
           </div>
 
-          {/* Dish name */}
+          {/* Dish info + interactions */}
           {activeDish && (
-            <div className="px-4 pt-3">
-              <h3 className="font-semibold text-gray-900">{activeDish.name}</h3>
-            </div>
-          )}
+            <div className="px-4 pt-3 pb-1">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-base">{activeDish.name}</h3>
+                  {dishes.length > 1 && (
+                    <p className="text-xs text-gray-400 mt-0.5">{activeIdx + 1} of {dishes.length} dishes</p>
+                  )}
+                </div>
+                {/* Vote buttons */}
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => handleVote(activeDish.id, 1)}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      myVotes[activeDish.id] === 1 ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}>
+                    <ThumbsUp size={12} />
+                    <span>{votes[activeDish.id] > 0 ? `+${votes[activeDish.id]}` : votes[activeDish.id] || '0'}</span>
+                  </button>
+                  <button onClick={() => handleVote(activeDish.id, -1)}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      myVotes[activeDish.id] === -1 ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}>
+                    <ThumbsDown size={12} />
+                  </button>
+                </div>
+              </div>
 
-          {/* Reactions */}
-          {activeDish && (
-            <div className="px-4 pt-2 pb-1 flex items-center gap-2">
-              {REACTIONS.map(({ type, emoji, label }) => (
-                <button
-                  key={type}
-                  onClick={() => handleReaction(activeDish.id, type)}
-                  title={label}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border transition-all ${
-                    myReactions[activeDish.id] === type
-                      ? 'bg-blue-50 border-blue-300 font-medium'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <span>{emoji}</span>
-                  <span className="text-xs text-gray-600">
-                    {reactions[activeDish.id]?.[type] || 0}
-                  </span>
-                </button>
-              ))}
-
-              <div className="ml-auto flex items-center gap-1">
-                <button
-                  onClick={() => handleVote(activeDish.id, 1)}
-                  className={`px-2 py-1 rounded-lg text-sm border transition-all ${myVotes[activeDish.id] === 1 ? 'bg-green-50 border-green-300' : 'border-gray-200'}`}
-                >👍 {votes[activeDish.id] > 0 ? `+${votes[activeDish.id]}` : votes[activeDish.id] || ''}</button>
-                <button
-                  onClick={() => handleVote(activeDish.id, -1)}
-                  className={`px-2 py-1 rounded-lg text-sm border transition-all ${myVotes[activeDish.id] === -1 ? 'bg-red-50 border-red-300' : 'border-gray-200'}`}
-                >👎</button>
+              {/* Reaction buttons */}
+              <div className="flex items-center gap-2 pb-3 border-b border-gray-50">
+                {REACTIONS.map(({ type, icon: Icon, label, activeClass }) => (
+                  <button key={type} onClick={() => handleReaction(activeDish.id, type)} title={label}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                      myReactions[activeDish.id] === type ? activeClass : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+                    }`}>
+                    <Icon size={12} />
+                    <span>{label}</span>
+                    <span className="font-semibold">{reactions[activeDish.id]?.[type] || 0}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </>
       ) : (
-        <div className="px-4 py-8 text-center text-gray-400 text-sm">No dishes posted yet</div>
+        <div className="px-4 py-8 text-center text-gray-400 text-sm">No dishes added yet</div>
       )}
 
-      {/* Comments toggle */}
-      <div className="px-4 py-3 border-t border-gray-50">
-        <button
-          onClick={() => setShowComments(s => !s)}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
-        >
-          <MessageCircle size={16} />
-          {showComments ? 'Hide comments' : 'View comments'}
+      {/* Comments */}
+      <div className="px-4 py-3">
+        <button onClick={() => setShowComments(s => !s)}
+          className="flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors">
+          <MessageCircle size={14} />
+          {showComments ? 'Hide comments' : 'Comments'}
         </button>
         {showComments && <CommentSection mealId={meal.id} />}
       </div>

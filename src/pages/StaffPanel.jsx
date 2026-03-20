@@ -107,24 +107,41 @@ useEffect(() => {
 }
 
   async function handleVerify(e) {
-    e.preventDefault()
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, name')
-      .eq('roll_number', verifyRoll.trim())
-      .single()
+  e.preventDefault()
+  setVerifyMsg('')
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, is_verified_eater')
+    .eq('roll_number', verifyRoll.trim().toUpperCase())
+    .single()
 
-    if (error || !data) { setVerifyMsg('Student not found'); return }
+  if (error || !data) {
+    setVerifyMsg('No student found with that roll number.')
+    return
+  }
 
-    await supabase.from('profiles').update({
+  if (data.is_verified_eater) {
+    setVerifyMsg(`${data.name} is already verified for ${mealType}.`)
+    return
+  }
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
       is_verified_eater: true,
       verified_meal_window: mealType,
       verified_at: new Date().toISOString()
-    }).eq('id', data.id)
+    })
+    .eq('roll_number', verifyRoll.trim().toUpperCase())
 
-    setVerifyMsg(`✓ ${data.name} verified for ${mealType}`)
-    setVerifyRoll('')
+  if (updateError) {
+    setVerifyMsg('Something went wrong. Try again.')
+    return
   }
+
+  setVerifyMsg(`Verified! ${data.name} can now react and vote for ${mealType}.`)
+  setVerifyRoll('')
+}
 
   // Add this state at the top with the other useState declarations
 const [pollMsg, setPollMsg] = useState('')
@@ -184,12 +201,23 @@ function getWeekStart() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Meal</label>
-              <select value={mealType} onChange={e => setMealType(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="breakfast">Breakfast</option>
-                <option value="lunch">Lunch</option>
-                <option value="dinner">Dinner</option>
-              </select>
+              <select
+  value={mealType}
+  onChange={e => setMealType(e.target.value)}
+  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+>
+  {['breakfast', 'lunch', 'dinner'].map(type => {
+    const alreadyPosted = todaysMeals.some(
+      m => m.type === type && m.hostel_block === hostelBlock
+    )
+    return (
+      <option key={type} value={type} disabled={alreadyPosted}>
+        {type.charAt(0).toUpperCase() + type.slice(1)}
+        {alreadyPosted ? ' (already posted)' : ''}
+      </option>
+    )
+  })}
+</select>
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Hostel Block</label>
